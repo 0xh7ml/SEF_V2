@@ -42,8 +42,8 @@ function Tool_Check() {
     type -P amass &>/dev/null && echo "[*] Amass		YES	]" || { echo "[*] Amass		NO	]"; }
     type -P gotator &>/dev/null && echo "[*] Gotator		YES	]" || { echo "[*] Gotator		NO	]"; }
     type -P crobat &>/dev/null && echo "[*] Crobat		YES	]" || { echo "[*] Crobat		NO	]"; }
-    type -P Github Subdomains &>/dev/null && echo "[*] Gotator		YES	]" || { echo "[*] Github Subdomains		NO	]"; }
-    type -P Puredns &>/dev/null && echo "[*] Gotator		YES	]" || { echo "[*] Puredns		NO	]"; }
+    type -P github-ubdomains &>/dev/null && echo "[*] Github Subdomains		YES	]" || { echo "[*] Github Subdomains		NO	]"; }
+    type -P puredns &>/dev/null && echo "[*] Puredns		YES	]" || { echo "[*] Puredns		NO	]"; }
     type -P anew &>/dev/null && echo "[*] Anew		YES	]" || { echo "[*] Anew		NO ]"; }
     type -P httpx &>/dev/null && echo "[*] Httpx		YES	]" || { echo "[*] Httpx		NO	]"; }
     echo ""
@@ -51,11 +51,6 @@ function Tool_Check() {
 }
 
 Tool_Check
-function startTime() {
-    echo "$(date +"%b %d %a %r")" | notify -provide-config $notify_config -silent
-}
-
-startTime
 function Passive() {
     echo "[=] Running Passive Enumeration"
     python3 ~/Tools/ctfr/ctfr.py -d $domain -o crtsh.txt &>/dev/null
@@ -129,6 +124,9 @@ function sefresult() {
     echo "[#] Script completed in total $(format_time $SECONDS)" | notify -provide-config $notify_config -silent
 }
 
+function ggwp() {
+    echo "$(date +"%b %d %a %r")" | notify -provide-config $notify_config -silent
+}
 while getopts ":hd:w:r:o:-:" optchar; do
     case "${optchar}" in
     -)
@@ -139,7 +137,7 @@ while getopts ":hd:w:r:o:-:" optchar; do
             for site in $(cat $domain_list); do
                 domain=$site
                 dir=$site
-                echo -e "\n Scanning $domain Right Now"
+                echo -e "\nStarting scan $domain right now"
                 Passive
                 SubFinal
                 Htpx
@@ -154,7 +152,8 @@ while getopts ":hd:w:r:o:-:" optchar; do
             for site in $(cat $domain_list); do
                 domain=$site
                 dir=$site
-                echo -e "\n Scanning $domain Right Now"
+                echo -e "\n Scanning $domain right now"
+                ggwp
                 Passive
                 Active
                 ActPsv
