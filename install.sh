@@ -23,6 +23,17 @@ wget -q -O - https://git.io/vQhTU | bash
 source ~/.bashrc
 echo -e " ";
 
+#Install Puredns
+GO111MODULE=on go get github.com/d3mondev/puredns/v2
+
+#Install github-subdomains
+go get -u github.com/gwen001/github-subdomains
+
+#Install gotator
+go get github.com/Josue87/gotator
+
+#Install crobat
+go get -u -v github.com/cgboal/sonarsearch/cmd/crobat
 
 #Install Subfinder.
 echo -e "Installing Subfinder";
@@ -68,9 +79,11 @@ GO111MODULE=on go get -v github.com/projectdiscovery/httpx/cmd/httpx
 echo -e " ";
 
 #Wordlist
+mkdir ~/Tools
 echo -e "Downloading Wordlist";
 curl -O https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
 echo -e "Downloading Resolvers"
 curl -O https://raw.githubusercontent.com/janmasarik/resolvers/master/resolvers.txt
+mv subdomains.txt resolvers.txt ~/Tools/
 
 echo -e "Installation Completed.";
