@@ -60,11 +60,8 @@ function Passive() {
     findomain --quiet -t $domain -u findomain.txt &>/dev/null
     github-subdomains -t $github -d $domain -o github.txt &>/dev/null
     crobat -s $domain -u >>crobat1.txt &>/dev/null
-    curl -s -k "https://jldc.me/anubis/subdomains/${domain}" | grep -Po "((http|https):\/\/)?(([\w.-]*)\.([\w]*)\.([A-z]))\w+" | sed '/^\./d' | anew -q curl_psub.txt &>/dev/null
-    curl -s -k "https://dns.bufferover.run/dns?q=.${domain}" | jq -r '.FDNS_A'[],'.RDNS'[] | cut -d ',' -f2 | grep -F ".$domain" | anew -q curl_psub.txt &>/dev/null
-    curl -s -k "https://tls.bufferover.run/dns?q=.${domain}" | jq -r .Results[] | cut -d ',' -f3 | grep -F ".$domain" | anew -q curl_psub.txt &>/dev/null
-    cat subfinder.txt assetfinder.txt amass.txt findomain.txt github.txt crtsh.txt crobat.txt curl_psub.txt | grep -F ".$domain" | sort -u >passive.txt
-    rm subfinder.txt assetfinder.txt amass.txt findomain.txt github.txt crtsh.txt crobat.txt curl_psub.txt
+    cat subfinder.txt assetfinder.txt amass.txt findomain.txt github.txt crtsh.txt crobat.txt | grep -F ".$domain" | sort -u >passive.txt
+    rm subfinder.txt assetfinder.txt amass.txt findomain.txt github.txt crtsh.txt crobat.txt
 }
 
 function Active() {
@@ -105,8 +102,8 @@ function SubFinal() {
 }
 
 function Output() {
-    mkdir -p $dir
-    mv active.txt passive.txt active_passive.txt permute.txt sub.txt sub.httpx $dir 2>/dev/null
+    mkdir -p ~/recon/$dir
+    mv active.txt passive.txt active_passive.txt permute.txt sub.txt sub.httpx ~/recon/$dir 2>/dev/null
 }
 
 function Htpx() {
