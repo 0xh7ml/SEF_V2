@@ -42,7 +42,7 @@ function Tool_Check() {
     type -P amass &>/dev/null && echo "[*] Amass		YES	]" || { echo "[*] Amass		NO	]"; }
     type -P gotator &>/dev/null && echo "[*] Gotator		YES	]" || { echo "[*] Gotator		NO	]"; }
     type -P crobat &>/dev/null && echo "[*] Crobat		YES	]" || { echo "[*] Crobat		NO	]"; }
-    type -P github-ubdomains &>/dev/null && echo "[*] Github Subdomains		YES	]" || { echo "[*] Github Subdomains		NO	]"; }
+    type -P github-subdomains &>/dev/null && echo "[*] Github Subdomains		YES	]" || { echo "[*] Github Subdomains		NO	]"; }
     type -P puredns &>/dev/null && echo "[*] Puredns		YES	]" || { echo "[*] Puredns		NO	]"; }
     type -P anew &>/dev/null && echo "[*] Anew		YES	]" || { echo "[*] Anew		NO ]"; }
     type -P httpx &>/dev/null && echo "[*] Httpx		YES	]" || { echo "[*] Httpx		NO	]"; }
