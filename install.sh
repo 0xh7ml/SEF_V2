@@ -16,6 +16,8 @@ echo "                 @0xh7ml                     ";
 
 }
 logo
+#
+sed -i 's/\r//' sef
 
 #Install Golang.
 echo -e "Installing Go-Lang";
