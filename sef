@@ -42,7 +42,7 @@ function Tool_Check() {
     type -P amass &>/dev/null && echo "[*] Amass		YES	]" || { echo "[*] Amass		NO	]"; }
     type -P gotator &>/dev/null && echo "[*] Gotator		YES	]" || { echo "[*] Gotator		NO	]"; }
     type -P crobat &>/dev/null && echo "[*] Crobat		YES	]" || { echo "[*] Crobat		NO	]"; }
-    type -P github-subdomains &>/dev/null && echo "[*] Github Subdomains		YES	]" || { echo "[*] Github Subdomains		NO	]"; }
+    type -P github-subdomains &>/dev/null && echo "[*] Github Subdomains 	YES	]" || { echo "[*] Github Subdomains		NO	]"; }
     type -P puredns &>/dev/null && echo "[*] Puredns		YES	]" || { echo "[*] Puredns		NO	]"; }
     type -P anew &>/dev/null && echo "[*] Anew		YES	]" || { echo "[*] Anew		NO ]"; }
     type -P httpx &>/dev/null && echo "[*] Httpx		YES	]" || { echo "[*] Httpx		NO	]"; }
@@ -56,10 +56,10 @@ function Passive() {
     python3 ~/Tools/ctfr/ctfr.py -d $domain -o crtsh.txt &>/dev/null
     subfinder -d $domain -o subfinder.txt &>/dev/null
     assetfinder --subs-only $domain | sort -u >assetfinder.txt
-    amass enum -passive -norecursive -noalts -d $domain -config $amass_config -o amass.txt &>/dev/null
+    amass enum -passive -norecursive -noalts -d $domain -o amass.txt &>/dev/null
     findomain --quiet -t $domain -u findomain.txt &>/dev/null
     github-subdomains -t $github -d $domain -o github.txt &>/dev/null
-    crobat -s $domain -u >>crobat1.txt &>/dev/null
+    crobat -s $domain -u >>crobat.txt &>/dev/null
     cat subfinder.txt assetfinder.txt amass.txt findomain.txt github.txt crtsh.txt crobat.txt | grep -F ".$domain" | sort -u >passive.txt
     rm subfinder.txt assetfinder.txt amass.txt findomain.txt github.txt crtsh.txt crobat.txt
 }
@@ -102,8 +102,8 @@ function SubFinal() {
 }
 
 function Output() {
-    mkdir -p ~/recon/$dir
-    mv active.txt passive.txt active_passive.txt permute.txt sub.txt sub.httpx ~/recon/$dir 2>/dev/null
+    mkdir -p $dir
+    mv active.txt passive.txt active_passive.txt permute.txt sub.txt sub.httpx $dir 2>/dev/null
 }
 
 function Htpx() {
@@ -116,13 +116,14 @@ function Htpx() {
 function sefresult() {
     echo ""
     echo ""
-    echo "[#] Total Subdomain Found $(cat sub.txt | wc -l)" | notify -provide-config $notify_config -silent
-    echo "[#] Total HTTP Probed Found $(cat sub.httpx | wc -l)" | notify -provide-config $notify_config -silent
-    echo "[#] Script completed in total $(format_time $SECONDS)" | notify -provide-config $notify_config -silent
+    echo "[#] Total Subdomain Found $(cat sub.txt | wc -l)" | notify -provider-config $notify_config -silent
+    echo "[#] Total HTTP Probed Found $(cat sub.httpx | wc -l)" | notify -provider-config $notify_config -silent
+    echo "[#] Script completed in total $(format_time $SECONDS)" | notify -provider-config $notify_config -silent
 }
 
 function ggwp() {
-    echo "$(date +"%b %d %a %r")" | notify -provide-config $notify_config -silent
+    echo "$(date +"%b %d %a %r")" | notify -provider-config $notify_config -silent
+    echo -e "\nStarting scan $domain right now" | notify -provider-config $notify_config -silent
 }
 while getopts ":hd:w:r:o:-:" optchar; do
     case "${optchar}" in
@@ -134,7 +135,7 @@ while getopts ":hd:w:r:o:-:" optchar; do
             for site in $(cat $domain_list); do
                 domain=$site
                 dir=$site
-                echo -e "\nStarting scan $domain right now"
+                echo -e "\nStarting scan $domain right now" | notify -provider-config $notify_config -silent
                 Passive
                 SubFinal
                 Htpx
