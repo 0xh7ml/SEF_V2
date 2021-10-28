@@ -67,7 +67,8 @@ function Passive() {
 function Active() {
     echo "[=] Running Active Enumeration"
     puredns bruteforce $wordlist $domain -w active_tmp.txt -r $resolvers --resolvers-trusted $resolvers_trusted -l $PUREDNS_PUBLIC_LIMIT --rate-limit-trusted $PUREDNS_TRUSTED_LIMIT &>/dev/null
-    cat active_tmp.txt | grep -F ".$domain" | sed "s/*.//" >active.txt
+    amass enum -brute -min-for-recursive 3 -d $domain -o amass_active_tmp.txt &>/dev/null
+    cat active_tmp.txt amass_active_tmp.txt | grep -F ".$domain" | sed "s/*.//" >active.txt
     rm active_tmp.txt
 }
 
