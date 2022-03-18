@@ -17,7 +17,7 @@ function banner() {
 banner
 
 ## Variables
-notify_config=~/conf.yaml
+## notify_config=~/conf.yaml
 resolvers=~/Tools/resolvers.txt
 resolvers_trusted=~/Tools/resolvers_trusted.txt
 wordlist=~/Tools/subdomains.txt
@@ -117,14 +117,19 @@ function Htpx() {
 function sefresult() {
     echo ""
     echo ""
-    echo "[#] Total Subdomain Found $(cat sub.txt | wc -l)" | notify -provider-config $notify_config -silent
-    echo "[#] Total HTTP Probed Found $(cat sub.httpx | wc -l)" | notify -provider-config $notify_config -silent
-    echo "[#] Script completed in total $(format_time $SECONDS)" | notify -provider-config $notify_config -silent
+    echo "[#] Total Subdomain Found $(cat sub.txt | wc -l)" 
+## notify -provider-config $notify_config -silent
+    echo "[#] Total HTTP Probed Found $(cat sub.httpx | wc -l)" 
+## notify -provider-config $notify_config -silent
+    echo "[#] Script completed in total $(format_time $SECONDS)"
+## notify -provider-config $notify_config -silent
 }
 
 function ggwp() {
-    echo "$(date +"%b %d %a %r")" | notify -provider-config $notify_config -silent
-    echo -e "\nStarting scan $domain right now" | notify -provider-config $notify_config -silent
+    echo "$(date +"%b %d %a %r")"
+## notify -provider-config $notify_config -silent
+    echo -e "\nStarting scan $domain right now"
+## notify -provider-config $notify_config -silent
 }
 while getopts ":hd:w:r:o:-:" optchar; do
     case "${optchar}" in
@@ -136,7 +141,8 @@ while getopts ":hd:w:r:o:-:" optchar; do
             for site in $(cat $domain_list); do
                 domain=$site
                 dir=$site
-                echo -e "\nStarting scan $domain right now" | notify -provider-config $notify_config -silent
+                echo -e "\nStarting scan $domain right now"
+## notify -provider-config $notify_config -silent
                 Passive
                 SubFinal
                 Htpx
