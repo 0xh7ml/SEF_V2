@@ -150,11 +150,14 @@ fi
 export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
 
 # Create Tools directory
-mkdir -p ~/Tools
-mkdir -p $HOME/go/bin
+mkdir -p "$HOME/Tools"
+mkdir -p "$HOME/go/bin"
 
-# Update PATH for current session
-export PATH=$PATH:$HOME/go/bin
+if [ ! -d "$HOME/Tools" ]; then
+    echo -e "${RED}[!] Failed to create Tools directory${NC}"
+    exit 1
+fi
+echo -e "${GREEN}[+] Tools directory ready${NC}"
 
 # Enhanced function to check and install Go tools
 install_go_tool() {
@@ -402,54 +405,68 @@ echo ""
 # Wordlists and Resolvers (from reconftw - improved for better results)
 echo -e "${BLUE}=== Downloading Wordlists and Resolvers ===${NC}"
 
-# Download helper with retry and progress
+# Download helper with improved retry and error handling
 download_file() {
     local url=$1
     local output=$2
     local description=$3
+    local attempts=5
+    local attempt=0
     
     echo -e "${CYAN}[*] $description${NC}"
-    if retry_cmd 3 2 curl -s --connect-timeout 10 --max-time 60 -o "$output" "$url" 2>/dev/null; then
-        if [ -s "$output" ]; then
-            echo -e "${GREEN}[+] Downloaded: $(basename $output)${NC}"
-            return 0
+    
+    while [ $attempt -lt $attempts ]; do
+        ((attempt++))
+        
+        if wget -L --connect-timeout=15 --timeout=120 -O "$output" "$url" 2>/dev/null; then
+            if [ -s "$output" ]; then
+                echo -e "${GREEN}[+] Downloaded: $(basename $output)${NC}"
+                return 0
+            else
+                echo -e "${YELLOW}[!] Downloaded file is empty, retrying...${NC}"
+                rm -f "$output"
+            fi
         else
-            echo -e "${YELLOW}[!] Downloaded file is empty: $output${NC}"
-            return 1
+            echo -e "${YELLOW}[!] Download attempt $attempt/$attempts failed, retrying...${NC}"
+            rm -f "$output"
         fi
-    else
-        echo -e "${RED}[!] Failed to download: $(basename $output)${NC}"
-        return 1
-    fi
+        
+        if [ $attempt -lt $attempts ]; then
+            sleep $((attempt * 2))
+        fi
+    done
+    
+    echo -e "${RED}[!] Failed to download after $attempts attempts: $(basename $output)${NC}"
+    return 1
 }
 
 # Main subdomain wordlist (from SecLists - comprehensive)
 download_file "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt" \
-    "~/Tools/subdomains.txt" "Downloading main subdomain wordlist (5000 entries)"
+    "$HOME/Tools/subdomains.txt" "Downloading main subdomain wordlist (5000 entries)"
 
 # Large subdomain wordlist for deep enumeration (assetnote)
 download_file "https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt" \
-    "~/Tools/subdomains_big.txt" "Downloading large subdomain wordlist (100000+ entries)"
+    "$HOME/Tools/subdomains_big.txt" "Downloading large subdomain wordlist (100000+ entries)"
 
 # Full permutation wordlist (from reconftw - 1000+ entries for comprehensive permutations)
 download_file "https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/permutations_list.txt" \
-    "~/Tools/permutations_list.txt" "Downloading full permutation list"
+    "$HOME/Tools/permutations_list.txt" "Downloading full permutation list"
 
 # Short permutation wordlist (from reconftw - for faster scanning)
 download_file "https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/permutations_list_short.txt" \
-    "~/Tools/permutations_list_short.txt" "Downloading short permutation list"
+    "$HOME/Tools/permutations_list_short.txt" "Downloading short permutation list"
 
 # Large resolver list (from trickest - maintained regularly)
 download_file "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt" \
-    "~/Tools/resolvers.txt" "Downloading resolver list from trickest"
+    "$HOME/Tools/resolvers.txt" "Downloading resolver list from trickest"
 
 # DNS record type wordlists for additional enumeration
 download_file "https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/srv_prefixes.txt" \
-    "~/Tools/srv_prefixes.txt" "Downloading SRV prefixes list"
+    "$HOME/Tools/srv_prefixes.txt" "Downloading SRV prefixes list"
 
 # Trusted resolvers (from reconftw - optimized by six2dez)
 echo -e "${CYAN}[*] Creating trusted resolvers list${NC}"
-cat > ~/Tools/resolvers_trusted.txt << 'EOF'
+cat > "$HOME/Tools/resolvers_trusted.txt" << 'EOF'
 8.8.8.8
 8.8.4.4
 1.1.1.1
@@ -466,8 +483,8 @@ echo -e "${GREEN}[+] Created trusted resolvers list${NC}"
 
 # Create GitHub/GitLab tokens placeholder
 echo -e "${CYAN}[*] Creating token placeholders${NC}"
-touch ~/Tools/.github_tokens
-touch ~/Tools/.gitlab_tokens
+touch "$HOME/Tools/.github_tokens"
+touch "$HOME/Tools/.gitlab_tokens"
 echo -e "${GREEN}[+] Created token files${NC}"
 
 # Ensure all Go tools are in system PATH

@@ -20,14 +20,14 @@ banner
 export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
 
 ## Variables (Updated with reconftw-sourced configurations)
-resolvers=~/Tools/resolvers.txt
-resolvers_trusted=~/Tools/resolvers_trusted.txt
-wordlist=~/Tools/subdomains.txt
-wordlist_big=~/Tools/subdomains_big.txt
-permute=~/Tools/permutations_list.txt
-permute_short=~/Tools/permutations_list_short.txt
-github=~/Tools/.github_tokens
-amass_config=~/Tools/amass_config.ini
+resolvers="$HOME/Tools/resolvers.txt"
+resolvers_trusted="$HOME/Tools/resolvers_trusted.txt"
+wordlist="$HOME/Tools/subdomains.txt"
+wordlist_big="$HOME/Tools/subdomains_big.txt"
+permute="$HOME/Tools/permutations_list.txt"
+permute_short="$HOME/Tools/permutations_list_short.txt"
+github="$HOME/Tools/.github_tokens"
+amass_config="$HOME/Tools/amass_config.ini"
 
 ## Performance tuning (from reconftw)
 PUREDNS_PUBLIC_LIMIT=5000      # Safe default for VPS
@@ -44,6 +44,9 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Silent mode flag
+SILENT=false
 
 ## Function
 function format_time() {
@@ -74,35 +77,35 @@ function Tool_Check() {
 Tool_Check
 
 function Passive() {
-    echo -e "${GREEN}[+] Running Passive Enumeration${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Running Passive Enumeration${NC}"
 
     # Run passive tools in parallel for speed
     (
-        echo -e "${YELLOW}[*] Running Subfinder...${NC}"
-        subfinder -d "$domain" -silent -all -o subfinder.txt
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Subfinder...${NC}"
+        subfinder -d "$domain" -silent -all -o subfinder.txt 2>/dev/null
     ) &
     pid1=$!
 
     (
-        echo -e "${YELLOW}[*] Running Assetfinder...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Assetfinder...${NC}"
         assetfinder --subs-only "$domain" 2>/dev/null | sort -u > assetfinder.txt
     ) &
     pid2=$!
 
     (
-        echo -e "${YELLOW}[*] Running Chaos (ProjectDiscovery)...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Chaos (ProjectDiscovery)...${NC}"
         chaos -d "$domain" -silent 2>/dev/null > chaos.txt
     ) &
     pid3=$!
 
     (
-        echo -e "${YELLOW}[*] Running Ctfr (CRT.sh)...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Ctfr (CRT.sh)...${NC}"
         python3 ~/Tools/ctfr/ctfr.py -d "$domain" -o crtsh.txt &>/dev/null
     ) &
     pid4=$!
 
     (
-        echo -e "${YELLOW}[*] Running GitHub Subdomains...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running GitHub Subdomains...${NC}"
         if [ -s "$github" ]; then
             github-subdomains -t "$github" -d "$domain" -o github.txt 2>/dev/null
         else
@@ -112,7 +115,7 @@ function Passive() {
     pid5=$!
 
     (
-        echo -e "${YELLOW}[*] Running Amass (passive)...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Amass (passive)...${NC}"
         if [ -f "$amass_config" ]; then
             amass enum -passive -norecursive -noalts -d "$domain" -config "$amass_config" -o amass.txt &>/dev/null
         else
@@ -130,11 +133,11 @@ function Passive() {
 }
 
 function Active() {
-    echo -e "${GREEN}[+] Running Active Enumeration${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Running Active Enumeration${NC}"
 
     # Use massdns for ultra-fast DNS bruteforcing
     if command -v massdns &>/dev/null; then
-        echo -e "${YELLOW}[*] Running MassDNS bruteforce...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running MassDNS bruteforce...${NC}"
         sed "s/$/.$domain/" "$wordlist" | massdns -r "$resolvers" -t A -o S -w massdns_tmp.txt 2>/dev/null
         cat massdns_tmp.txt | cut -d ' ' -f1 | grep -v "\\.$" > active_massdns.txt
         rm -f massdns_tmp.txt
@@ -142,13 +145,13 @@ function Active() {
 
     # Fallback to puredns if massdns not available
     if [ ! -s active_massdns.txt ] || [ ! -f active_massdns.txt ]; then
-        echo -e "${YELLOW}[*] Running Puredns bruteforce...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Puredns bruteforce...${NC}"
         puredns bruteforce "$wordlist" "$domain" -w active_puredns.txt -r "$resolvers" --resolvers-trusted "$resolvers_trusted" -l "$PUREDNS_PUBLIC_LIMIT" --rate-limit-trusted "$PUREDNS_TRUSTED_LIMIT" --wildcard-tests "$PUREDNS_WILDCARDTEST_LIMIT" --wildcard-batch "$PUREDNS_WILDCARDBATCH_LIMIT" 2>/dev/null
         mv active_puredns.txt active_massdns.txt 2>/dev/null
     fi
 
     # Amass active enumeration (limited for speed)
-    echo -e "${YELLOW}[*] Running Amass active enumeration...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running Amass active enumeration...${NC}"
     amass enum -brute -min-for-recursive 2 -d "$domain" -o amass_active.txt &>/dev/null
 
     # Combine active results
@@ -164,12 +167,12 @@ function DNS_Resolve() {
         return
     fi
 
-    echo -e "${YELLOW}[*] Resolving DNS records with DNSx...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Resolving DNS records with DNSx...${NC}"
     dnsx -l "$input_file" -r "$resolvers_trusted" -silent -o "$output_file" -retry 3 -threads "$THREADS" 2>/dev/null
 }
 
 function ActPsv() {
-    echo -e "${GREEN}[+] Collecting Active & Passive Enum Result${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Collecting Active & Passive Enum Result${NC}"
 
     # Combine and deduplicate
     cat active.txt passive.txt 2>/dev/null | grep -F ".$domain" | sort -u > all_subdomains.txt
@@ -192,10 +195,10 @@ function Permute() {
     local gotator_flags="-depth 1 -numbers 3 -mindup -adv -md"
 
     if [[ $sub_count -le 100 ]]; then
-        echo -e "${GREEN}[+] Running Dual Permute Enumeration (Full Wordlist)${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Running Dual Permute Enumeration (Full Wordlist)${NC}"
 
         # First level permutations with full wordlist
-        echo -e "${YELLOW}[*] Level 1 permutations with Gotator...${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Level 1 permutations with Gotator...${NC}"
         gotator -sub active_passive.txt -perm "$permute" $gotator_flags 2>/dev/null | sort -u > permute1_raw.txt
 
         # Resolve first level
@@ -207,7 +210,7 @@ function Permute() {
 
         # Second level permutations (only if we have good results from first level)
         if [ -s permute1.txt ] && [[ $(wc -l < permute1.txt) -le 50 ]]; then
-            echo -e "${YELLOW}[*] Level 2 permutations with Gotator...${NC}"
+            [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Level 2 permutations with Gotator...${NC}"
             gotator -sub permute1.txt -perm "$permute" $gotator_flags 2>/dev/null | sort -u > permute2_raw.txt
 
             if [ -s permute2_raw.txt ]; then
@@ -225,11 +228,11 @@ function Permute() {
         rm -f permute1_raw.txt permute1.txt permute2_raw.txt permute2.txt
 
     elif [[ $sub_count -le 500 ]]; then
-        echo -e "${GREEN}[+] Running Single Permute Enumeration (Short Wordlist)${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Running Single Permute Enumeration (Short Wordlist)${NC}"
 
         # Use short wordlist for better performance (reconftw approach)
         if [ -f "$permute_short" ]; then
-            echo -e "${YELLOW}[*] Generating permutations with Gotator (short)...${NC}"
+            [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Generating permutations with Gotator (short)...${NC}"
             gotator -sub active_passive.txt -perm "$permute_short" $gotator_flags 2>/dev/null | sort -u > permute_raw.txt
         else
             echo -e "${YELLOW}[*] Generating permutations with Gotator (full)...${NC}"
@@ -250,7 +253,7 @@ function Permute() {
 }
 
 function SubFinal() {
-    echo -e "${GREEN}[+] Collecting Enumerated Final Result${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Collecting Enumerated Final Result${NC}"
 
     # Collect all subdomain files that exist and are not empty
     local files=()
@@ -269,22 +272,24 @@ function SubFinal() {
 }
 
 function Output() {
-    mkdir -p "$dir"
-    mkdir -p "$dir/subdomains" "$dir/dns"
-    mv active.txt passive.txt active_passive.txt permute.txt sub.txt sub.httpx sub.alive sub.tech sub.cname sub.mx sub.ns sub.srv sub.ptr sub.status sub.txt_records "$dir/" 2>/dev/null
-    echo -e "${GREEN}[+] Results saved to: $dir${NC}"
-    echo -e "${GREEN}[+] Subdomains: $dir/sub.txt${NC}"
-    echo -e "${GREEN}[+] DNS Records: $dir/sub.{cname,mx,ns,srv,ptr,txt_records}${NC}"
+    # Use domain directory if no custom output dir specified
+    local output_dir="${dir:-$domain}"
+    mkdir -p "$output_dir"
+    mkdir -p "$output_dir/subdomains" "$output_dir/dns"
+    mv active.txt passive.txt active_passive.txt permute.txt sub.txt sub.httpx sub.alive sub.tech sub.cname sub.mx sub.ns sub.srv sub.ptr sub.status sub.txt_records "$output_dir/" 2>/dev/null
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Results saved to: $output_dir${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Subdomains: $output_dir/sub.txt${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] DNS Records: $output_dir/sub.{cname,mx,ns,srv,ptr,txt_records}${NC}"
 }
 
 function Htpx() {
     if [ ! -f sub.txt ] || [ ! -s sub.txt ]; then
-        echo -e "${YELLOW}[-] No subdomains to probe${NC}"
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[-] No subdomains to probe${NC}"
         touch sub.httpx
         return
     fi
 
-    echo -e "${GREEN}[+] Running HTTPx for HTTP probing${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Running HTTPx for HTTP probing${NC}"
 
     # Main HTTP probe with multiple protocols
     httpx -l sub.txt -timeout 20 -silent -retries 2 -status-code -title -tech-detect -o sub.httpx -threads "$THREADS" 2>/dev/null
@@ -293,11 +298,11 @@ function Htpx() {
     awk '{print $1}' sub.httpx > sub.alive
 
     # CSP probe for additional discovery
-    echo -e "${YELLOW}[*] Running CSP probe...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running CSP probe...${NC}"
     httpx -l sub.txt -csp-probe -timeout 20 -silent -retries 2 | grep -F ".$domain" | anew sub.httpx 2>/dev/null
 
     # TLS probe
-    echo -e "${YELLOW}[*] Running TLS probe...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running TLS probe...${NC}"
     httpx -l sub.txt -tls-probe -timeout 20 -silent -retries 2 | grep -F ".$domain" | anew sub.httpx 2>/dev/null
 
     # Extract technical info
@@ -313,28 +318,28 @@ function DNS_Recon() {
         return
     fi
 
-    echo -e "${GREEN}[+] Running DNS reconnaissance${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${GREEN}[+] Running DNS reconnaissance${NC}"
 
     # CNAME records
-    echo -e "${YELLOW}[*] Gathering CNAME records...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Gathering CNAME records...${NC}"
     dnsx -l sub.txt -r "$resolvers_trusted" -silent -cname -threads "$THREADS" 2>/dev/null | grep "CNAME" | awk '{print $1}' > sub.cname
 
     # MX records
-    echo -e "${YELLOW}[*] Gathering MX records...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Gathering MX records...${NC}"
     dnsx -l sub.txt -r "$resolvers_trusted" -silent -mx -threads "$THREADS" 2>/dev/null | grep "MX" | awk '{print $1}' > sub.mx
 
     # TXT records
-    echo -e "${YELLOW}[*] Gathering TXT records...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Gathering TXT records...${NC}"
     dnsx -l sub.txt -r "$resolvers_trusted" -silent -txt -threads "$THREADS" 2>/dev/null | grep "TXT" | awk '{print $1}' > sub.txt_records
 
     # NS records (from reconftw)
-    echo -e "${YELLOW}[*] Gathering NS records...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Gathering NS records...${NC}"
     dnsx -l sub.txt -r "$resolvers_trusted" -silent -ns -threads "$THREADS" 2>/dev/null | grep "NS" | awk '{print $1}' > sub.ns
 
     # SRV record enumeration (from reconftw)
     if [ -f ~/Tools/srv_prefixes.txt ]; then
-        echo -e "${YELLOW}[*] Running SRV record enumeration...${NC}"
-        sed "s/$/_tcp.$domain/" ~/Tools/srv_prefixes.txt > srv_queries.txt
+        [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running SRV record enumeration...${NC}"
+        sed "s/$/_tcp.$domain/" "$HOME/Tools/srv_prefixes.txt" > srv_queries.txt
         dnsx -l srv_queries.txt -r "$resolvers_trusted" -silent -srv -threads "$THREADS" 2>/dev/null > srv_results_raw.txt
 
         # Extract hostnames from SRV results
@@ -349,7 +354,7 @@ function DNS_Recon() {
     fi
 
     # PTR sweep for IP reverse DNS (from reconftw)
-    echo -e "${YELLOW}[*] Running PTR reverse DNS sweep...${NC}"
+    [ "$SILENT" != "true" ] && echo -e "${YELLOW}[*] Running PTR reverse DNS sweep...${NC}"
     if [ -f sub.txt ]; then
         dnsx -l sub.txt -r "$resolvers_trusted" -silent -a -threads "$THREADS" 2>/dev/null | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' | sort -u > ptr_ips.txt
 
@@ -409,11 +414,13 @@ function sefresult() {
 }
 
 function ggwp() {
-    echo ""
-    echo -e "${BLUE}========================================${NC}"
-    echo -e "${GREEN}[+] Starting scan for: $domain${NC}"
-    echo -e "${BLUE}========================================${NC}"
-    echo "$(date +"%b %d %a %r")"
+    if [ "$SILENT" != "true" ]; then
+        echo ""
+        echo -e "${BLUE}========================================${NC}"
+        echo -e "${GREEN}[+] Starting scan for: $domain${NC}"
+        echo -e "${BLUE}========================================${NC}"
+        echo "$(date +"%b %d %a %r")"
+    fi
 }
 
 function validate_domain() {
@@ -551,8 +558,9 @@ while getopts ":hd:w:r:o:-:" optchar; do
         echo "  -w <wordlist>         Specify custom wordlist (default: ~/Tools/subdomains.txt)"
         echo "                        - Big wordlist: ~/Tools/subdomains_big.txt"
         echo "  -r <resolvers>        Specify custom resolvers (default: ~/Tools/resolvers.txt)"
-        echo "  -o <output_dir>       Specify output directory"
+        echo "  -o <output_dir>       Specify output directory (default: domain name)"
         echo "  --ac <config>         Specify Amass config file"
+        echo "  -silent               Suppress verbose output"
         echo ""
         echo "Scan Modes:"
         echo "  --quick               Quick passive scan only"
@@ -561,7 +569,7 @@ while getopts ":hd:w:r:o:-:" optchar; do
         echo "  --dLa <file>          Full scan for domain list"
         echo ""
         echo "Enumeration Techniques (from reconftw):"
-echo "  - Passive: Subfinder, Assetfinder, Crobat, Chaos, GitHub, GitLab, Amass"
+        echo "  - Passive: Subfinder, Assetfinder, Crobat, Chaos, GitHub, GitLab, Amass"
         echo "  - Active: MassDNS/Puredns bruteforce, DNS NOERROR technique"
         echo "  - Permutations: Gotator with adaptive wordlist selection"
         echo "  - DNS Recon: CNAME, MX, NS, SRV records, PTR reverse DNS sweep"
@@ -581,8 +589,8 @@ echo "  - Passive: Subfinder, Assetfinder, Crobat, Chaos, GitHub, GitLab, Amass"
         echo "Examples:"
         echo "  $0 -d example.com --all"
         echo "  $0 -d example.com --quick -o results/"
-        echo "  $0 -d example.com -w custom_wordlist.txt --all"
-        echo "  $0 --dLa domains.txt"
+        echo "  $0 -d example.com -w custom_wordlist.txt --all -silent"
+        echo "  $0 --dLa domains.txt -o ./scans/ -silent"
         echo ""
         exit 0
         ;;
@@ -605,6 +613,9 @@ echo "  - Passive: Subfinder, Assetfinder, Crobat, Chaos, GitHub, GitLab, Amass"
         ;;
     o)
         dir="$OPTARG"
+        ;;
+    s)
+        SILENT=true
         ;;
     *)
         if [ "$OPTERR" != 1 ] || [ "${optspec:0:1}" = ":" ]; then
