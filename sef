@@ -58,7 +58,7 @@ function Tool_Check() {
     echo -e "${BLUE}========================================${NC}"
     echo -e "${BLUE}       Tool Availability Check${NC}"
     echo -e "${BLUE}========================================${NC}"
-    local tools=("subfinder" "assetfinder" "findomain" "amass" "gotator" "crobat" "github-subdomains" "gitlab-subdomains" "puredns" "anew" "httpx" "chaos" "dnsx" "altdns" "massdns" "tlsx")
+    local tools=("subfinder" "assetfinder" "amass" "gotator" "github-subdomains" "puredns" "anew" "httpx" "chaos" "dnsx" "massdns" "tlsx")
 
     for tool in "${tools[@]}"; do
         if type -P "$tool" &>/dev/null; then
@@ -90,28 +90,16 @@ function Passive() {
     pid2=$!
 
     (
-        echo -e "${YELLOW}[*] Running Findomain...${NC}"
-        findomain --quiet -t "$domain" -u findomain.txt
-    ) &
-    pid3=$!
-
-    (
-        echo -e "${YELLOW}[*] Running Crobat...${NC}"
-        crobat -s "$domain" -u 2>/dev/null > crobat.txt
-    ) &
-    pid4=$!
-
-    (
         echo -e "${YELLOW}[*] Running Chaos (ProjectDiscovery)...${NC}"
         chaos -d "$domain" -silent 2>/dev/null > chaos.txt
     ) &
-    pid5=$!
+    pid3=$!
 
     (
         echo -e "${YELLOW}[*] Running Ctfr (CRT.sh)...${NC}"
         python3 ~/Tools/ctfr/ctfr.py -d "$domain" -o crtsh.txt &>/dev/null
     ) &
-    pid6=$!
+    pid4=$!
 
     (
         echo -e "${YELLOW}[*] Running GitHub Subdomains...${NC}"
@@ -121,17 +109,7 @@ function Passive() {
             touch github.txt
         fi
     ) &
-    pid7=$!
-
-    (
-        echo -e "${YELLOW}[*] Running GitLab Subdomains...${NC}"
-        if [ -s "$github" ]; then
-            gitlab-subdomains -d "$domain" -t "$github" 2>/dev/null | anew -q gitlab.txt
-        else
-            touch gitlab.txt
-        fi
-    ) &
-    pid8=$!
+    pid5=$!
 
     (
         echo -e "${YELLOW}[*] Running Amass (passive)...${NC}"
@@ -141,14 +119,14 @@ function Passive() {
             amass enum -passive -norecursive -noalts -d "$domain" -o amass.txt &>/dev/null
         fi
     ) &
-    pid8=$!
+    pid6=$!
 
     # Wait for all background processes
-    wait $pid1 $pid2 $pid3 $pid4 $pid5 $pid6 $pid7 $pid8 $pid9
+    wait $pid1 $pid2 $pid3 $pid4 $pid5 $pid6
 
     # Combine results
-    cat subfinder.txt assetfinder.txt findomain.txt crobat.txt chaos.txt crtsh.txt github.txt gitlab.txt amass.txt 2>/dev/null | grep -F ".$domain" | sort -u > passive.txt
-    rm -f subfinder.txt assetfinder.txt findomain.txt crobat.txt chaos.txt crtsh.txt github.txt gitlab.txt amass.txt
+    cat subfinder.txt assetfinder.txt chaos.txt crtsh.txt github.txt amass.txt 2>/dev/null | grep -F ".$domain" | sort -u > passive.txt
+    rm -f subfinder.txt assetfinder.txt chaos.txt crtsh.txt github.txt amass.txt
 }
 
 function Active() {
@@ -169,22 +147,13 @@ function Active() {
         mv active_puredns.txt active_massdns.txt 2>/dev/null
     fi
 
-    # DNS NOERROR technique (from reconftw - finds subdomains that don't return NXDOMAIN)
-    echo -e "${YELLOW}[*] Running DNS NOERROR check...${NC}"
-    random_subdomain="${RANDOM}thistotallynotexist${RANDOM}.$domain"
-    dns_response=$(echo "$random_subdomain" | dnsx -r "$resolvers" -rcode noerror,nxdomain -retry 3 -silent 2>/dev/null | cut -d' ' -f2)
-
-    if [[ $dns_response == "[NXDOMAIN]" ]]; then
-        dnsx -d "$domain" -r "$resolvers" -silent -rcode noerror -w "$wordlist" 2>/dev/null | cut -d' ' -f1 | anew -q active_noerror.txt 2>/dev/null
-    fi
-
     # Amass active enumeration (limited for speed)
     echo -e "${YELLOW}[*] Running Amass active enumeration...${NC}"
     amass enum -brute -min-for-recursive 2 -d "$domain" -o amass_active.txt &>/dev/null
 
     # Combine active results
-    cat active_massdns.txt amass_active.txt active_noerror.txt 2>/dev/null | grep -F ".$domain" | sed "s/*.//" | sort -u > active.txt
-    rm -f active_massdns.txt amass_active.txt active_noerror.txt
+    cat active_massdns.txt amass_active.txt 2>/dev/null | grep -F ".$domain" | sed "s/*.//" | sort -u > active.txt
+    rm -f active_massdns.txt amass_active.txt
 }
 
 function DNS_Resolve() {
@@ -592,7 +561,7 @@ while getopts ":hd:w:r:o:-:" optchar; do
         echo "  --dLa <file>          Full scan for domain list"
         echo ""
         echo "Enumeration Techniques (from reconftw):"
-        echo "  - Passive: Subfinder, Assetfinder, Findomain, Crobat, Chaos, GitHub, GitLab, Amass"
+echo "  - Passive: Subfinder, Assetfinder, Crobat, Chaos, GitHub, GitLab, Amass"
         echo "  - Active: MassDNS/Puredns bruteforce, DNS NOERROR technique"
         echo "  - Permutations: Gotator with adaptive wordlist selection"
         echo "  - DNS Recon: CNAME, MX, NS, SRV records, PTR reverse DNS sweep"
