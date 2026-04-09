@@ -33,9 +33,24 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Check if Go is already installed
+GO_MIN_VERSION="1.20"
+GO_INSTALLED=false
+
 if command -v go &> /dev/null; then
-    echo -e "${GREEN}[+] Go is already installed: $(go version)${NC}"
-else
+    GO_CURRENT_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+    GO_VERSION_NUM=$(echo $GO_CURRENT_VERSION | cut -d. -f1,2)
+    GO_MIN_NUM=$(echo $GO_MIN_VERSION | cut -d. -f1,2)
+
+    if [ "$(printf '%s\n' "$GO_MIN_NUM" "$GO_VERSION_NUM" | sort -V | head -n1)" = "$GO_MIN_NUM" ]; then
+        echo -e "${GREEN}[+] Go is already installed: $(go version)${NC}"
+        GO_INSTALLED=true
+    else
+        echo -e "${YELLOW}[!] Go is installed but version $GO_CURRENT_VERSION is older than required $GO_MIN_VERSION${NC}"
+        echo -e "${YELLOW}[*] Installing Go-Lang...${NC}"
+    fi
+fi
+
+if [ "$GO_INSTALLED" = false ]; then
     # Install Golang
     echo -e "${YELLOW}[*] Installing Go-Lang...${NC}"
     GO_VERSION="1.23.5"
@@ -62,91 +77,114 @@ mkdir -p $HOME/go/bin
 # Update PATH for current session
 export PATH=$PATH:$HOME/go/bin
 
-echo -e "${YELLOW}[*] Installing tools...${NC}"
+# Function to check and install Go tools
+install_go_tool() {
+    local tool_name=$1
+    local package_path=$2
+    local binary_name=$3
 
-# Install Subfinder
-echo -e "${YELLOW}[*] Installing Subfinder${NC}"
-go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest 2>&1 | grep -E "(download|install|compile)"
+    # Check if tool already exists in PATH
+    if command -v $binary_name &> /dev/null; then
+        echo -e "${GREEN}[+] $tool_name is already installed: $($binary_name -version 2>/dev/null || $($binary_name version 2>/dev/null) || echo 'installed')${NC}"
+        return
+    fi
 
-# Install Puredns
-echo -e "${YELLOW}[*] Installing Puredns${NC}"
-go install -v github.com/d3mondev/puredns/v2@latest 2>&1 | grep -E "(download|install|compile)"
+    # Check if binary exists in Go bin directory
+    if [ -f $HOME/go/bin/$binary_name ]; then
+        # Create symlink if not exists
+        if [ ! -L /usr/local/bin/$binary_name ]; then
+            ln -sf $HOME/go/bin/$binary_name /usr/local/bin/$binary_name
+        fi
+        echo -e "${GREEN}[+] $tool_name is already installed${NC}"
+        return
+    fi
 
-# Install Httpx
-echo -e "${YELLOW}[*] Installing Httpx${NC}"
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest 2>&1 | grep -E "(download|install|compile)"
+    # Install the tool
+    echo -e "${YELLOW}[*] Installing $tool_name${NC}"
+    go install -v $package_path@latest 2>&1 | grep -E "(download|install|compile)"
 
-# Install Chaos (ProjectDiscovery's subdomain discovery)
-echo -e "${YELLOW}[*] Installing Chaos${NC}"
-go install -v github.com/projectdiscovery/chaos-client/cmd/chaos@latest 2>&1 | grep -E "(download|install|compile)"
+    # Create symlink to /usr/local/bin
+    if [ -f $HOME/go/bin/$binary_name ]; then
+        ln -sf $HOME/go/bin/$binary_name /usr/local/bin/$binary_name
+    fi
+}
 
-# Install Assetfinder
-echo -e "${YELLOW}[*] Installing Assetfinder${NC}"
-go install -v github.com/tomnomnom/assetfinder@latest 2>&1 | grep -E "(download|install|compile)"
+# Function to check and install binary tools
+install_binary_tool() {
+    local tool_name=$1
+    local binary_path=$2
+    local install_function=$3
 
-# Install Anew
-echo -e "${YELLOW}[*] Installing Anew${NC}"
-go install -v github.com/tomnomnom/anew@latest 2>&1 | grep -E "(download|install|compile)"
+    # Check if tool already exists
+    if command -v $binary_path &> /dev/null; then
+        echo -e "${GREEN}[+] $tool_name is already installed${NC}"
+        return
+    fi
 
-# Install Gotator
-echo -e "${YELLOW}[*] Installing Gotator${NC}"
-go install -v github.com/Josue87/gotator@latest 2>&1 | grep -E "(download|install|compile)"
+    # Install the tool
+    $install_function
+}
 
-# Install Crobat
-echo -e "${YELLOW}[*] Installing Crobat${NC}"
-go install -v github.com/cgboal/sonarsearch/cmd/crobat@latest 2>&1 | grep -E "(download|install|compile)"
+echo -e "${YELLOW}[*] Checking tools and installing if needed...${NC}"
 
-# Install Github-subdomains
-echo -e "${YELLOW}[*] Installing Github-subdomains${NC}"
-go install -v github.com/gwen001/github-subdomains@latest 2>&1 | grep -E "(download|install|compile)"
-
-# Install Altdns (alternative to gotator for permutations)
-echo -e "${YELLOW}[*] Installing Altdns${NC}"
-go install -v github.com/infosec-au/altdns@latest 2>&1 | grep -E "(download|install|compile)"
-
-# Install DNSx (faster DNS resolution)
-echo -e "${YELLOW}[*] Installing DNSx${NC}"
-go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest 2>&1 | grep -E "(download|install|compile)"
-
-# Install Tlsx (TLS certificate subdomain discovery - from reconftw)
-echo -e "${YELLOW}[*] Installing Tlsx${NC}"
-go install -v github.com/projectdiscovery/tlsx/cmd/tlsx@latest 2>&1 | grep -E "(download|install|compile)"
-
-# Install Gitlab-subdomains (additional passive source - from reconftw)
-echo -e "${YELLOW}[*] Installing Gitlab-subdomains${NC}"
-go install -v github.com/gwen001/gitlab-subdomains@latest 2>&1 | grep -E "(download|install|compile)"
+# Install Go tools
+install_go_tool "Subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder" "subfinder"
+install_go_tool "Puredns" "github.com/d3mondev/puredns/v2" "puredns"
+install_go_tool "Httpx" "github.com/projectdiscovery/httpx/cmd/httpx" "httpx"
+install_go_tool "Chaos" "github.com/projectdiscovery/chaos-client/cmd/chaos" "chaos"
+install_go_tool "Assetfinder" "github.com/tomnomnom/assetfinder" "assetfinder"
+install_go_tool "Anew" "github.com/tomnomnom/anew" "anew"
+install_go_tool "Gotator" "github.com/Josue87/gotator" "gotator"
+install_go_tool "Crobat" "github.com/cgboal/sonarsearch/cmd/crobat" "crobat"
+install_go_tool "Github-subdomains" "github.com/gwen001/github-subdomains" "github-subdomains"
+install_go_tool "Altdns" "github.com/infosec-au/altdns" "altdns"
+install_go_tool "DNSx" "github.com/projectdiscovery/dnsx/cmd/dnsx" "dnsx"
+install_go_tool "Tlsx" "github.com/projectdiscovery/tlsx/cmd/tlsx" "tlsx"
+install_go_tool "Gitlab-subdomains" "github.com/gwen001/gitlab-subdomains" "gitlab-subdomains"
 
 # Install Findomain
-echo -e "${YELLOW}[*] Installing Findomain${NC}"
-FINDOMAIN_VERSION=$(curl -s https://api.github.com/repos/Edu4rdSHL/findomain/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-wget -q https://github.com/Edu4rdSHL/findomain/releases/download/${FINDOMAIN_VERSION}/findomain-linux -O /tmp/findomain-linux
-chmod +x /tmp/findomain-linux
-mv /tmp/findomain-linux /usr/bin/findomain
+install_binary_tool "Findomain" "findomain" '
+    echo -e "${YELLOW}[*] Installing Findomain${NC}"
+    FINDOMAIN_VERSION=$(curl -s https://api.github.com/repos/Edu4rdSHL/findomain/releases/latest | grep '"'"'tag_name'"'"' | sed -E '"'"'s/.*"([^"]+)".*/\1/'"'"')
+    wget -q https://github.com/Edu4rdSHL/findomain/releases/download/${FINDOMAIN_VERSION}/findomain-linux -O /tmp/findomain-linux
+    chmod +x /tmp/findomain-linux
+    mv /tmp/findomain-linux /usr/bin/findomain
+'
 
 # Install Amass (latest version)
-echo -e "${YELLOW}[*] Installing Amass${NC}"
-AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-cd /tmp && wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.zip
-unzip -q amass_${AMASS_VERSION#v}_linux_amd64.zip
-mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
-rm -rf amass_* /tmp/amass*
+install_binary_tool "Amass" "amass" '
+    echo -e "${YELLOW}[*] Installing Amass${NC}"
+    AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"'"'tag_name'"'"' | sed -E '"'"'s/.*"([^"]+)".*/\1/'"'"')
+    cd /tmp && wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.zip
+    unzip -q amass_${AMASS_VERSION#v}_linux_amd64.zip
+    mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
+    rm -rf amass_* /tmp/amass*
+'
 
 # Install ctfr for CRT.sh enumeration
-echo -e "${YELLOW}[*] Installing ctfr${NC}"
+echo -e "${YELLOW}[*] Checking ctfr${NC}"
 if [ ! -d ~/Tools/ctfr ]; then
+    echo -e "${YELLOW}[*] Installing ctfr${NC}"
     git clone https://github.com/UnaPibaGeek/ctfr.git ~/Tools/ctfr
+    pip3 install -q argparse requests
+else
+    echo -e "${GREEN}[+] ctfr is already installed${NC}"
 fi
-pip3 install -q argparse requests
 
 # Install massdns for ultra-fast DNS resolution
-echo -e "${YELLOW}[*] Installing massdns${NC}"
-if [ ! -d ~/massdns ]; then
-    git clone https://github.com/blechschmidt/massdns.git ~/massdns
+echo -e "${YELLOW}[*] Checking massdns${NC}"
+if command -v massdns &> /dev/null; then
+    echo -e "${GREEN}[+] massdns is already installed${NC}"
+else
+    echo -e "${YELLOW}[*] Installing massdns${NC}"
+    if [ ! -d ~/massdns ]; then
+        git clone https://github.com/blechschmidt/massdns.git ~/massdns
+    fi
+    cd ~/massdns
+    make &>/dev/null
+    mv ~/massdns/bin/massdns /usr/local/bin/
+    cd - &>/dev/null
 fi
-cd ~/massdns
-make &>/dev/null
-mv ~/massdns/bin/massdns /usr/local/bin/
-cd - &>/dev/null
 
 # Wordlists and Resolvers (from reconftw - improved for better results)
 echo -e "${YELLOW}[*] Downloading Wordlists and Resolvers${NC}"
@@ -186,6 +224,15 @@ curl -s -o ~/Tools/srv_prefixes.txt https://raw.githubusercontent.com/six2dez/re
 
 # Create GitHub/GitLab tokens placeholder
 touch ~/Tools/.github_tokens
+
+# Ensure all Go tools are linked to /usr/local/bin for system-wide access
+echo -e "${YELLOW}[*] Ensuring all tools are in system PATH...${NC}"
+GO_TOOLS=("subfinder" "puredns" "httpx" "chaos" "assetfinder" "anew" "gotator" "crobat" "github-subdomains" "altdns" "dnsx" "tlsx" "gitlab-subdomains")
+for tool in "${GO_TOOLS[@]}"; do
+    if [ -f $HOME/go/bin/$tool ] && [ ! -L /usr/local/bin/$tool ]; then
+        ln -sf $HOME/go/bin/$tool /usr/local/bin/$tool
+    fi
+done
 
 echo -e "${GREEN}[+] Installation Completed Successfully!${NC}"
 echo ""

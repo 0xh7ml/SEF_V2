@@ -16,6 +16,9 @@ function banner() {
 
 banner
 
+## Set PATH for Go tools
+export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+
 ## Variables (Updated with reconftw-sourced configurations)
 resolvers=~/Tools/resolvers.txt
 resolvers_trusted=~/Tools/resolvers_trusted.txt
