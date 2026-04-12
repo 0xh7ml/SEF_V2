@@ -116,10 +116,10 @@ install_amass() {
     echo -e "${YELLOW}[*] Installing Amass...${NC}"
     AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     cd /tmp
-    if wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.tar.gz ; then
-        tar -xzf amass_${AMASS_VERSION#v}_linux_amd64.tar.gz
-        if [ -f amass_${AMASS_VERSION#v}_linux_amd64/amass ]; then
-            mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
+    if wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_darwin_amd64.tar.gz ; then
+        tar -xzf amass_darwin_amd64.tar.gz
+        if [ -f amass_darwin_amd64/amass ]; then
+            mv amass_darwin_amd64/amass /usr/local/bin/
             rm -rf amass_*
             cd - &>/dev/null
             echo -e "${GREEN}[+] Amass installed successfully${NC}"
