@@ -27,6 +27,18 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Detect the real user who invoked sudo
+if [ -n "$SUDO_USER" ]; then
+    REAL_USER="$SUDO_USER"
+    REAL_HOME=$(eval echo ~$SUDO_USER)
+else
+    REAL_USER="$USER"
+    REAL_HOME="$HOME"
+fi
+
+echo -e "${GREEN}[+] Installing for user: $REAL_USER${NC}"
+echo -e "${GREEN}[+] Using home directory: $REAL_HOME${NC}"
+
 # Remove Windows line endings
 sed -i 's/\r//' install.sh
 sed -i 's/\r//' sef
@@ -61,9 +73,9 @@ check_dependencies() {
         fi
     fi
 
-    # Set Go PATH
-    export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
-    echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
+    # Set Go PATH for real user
+    export PATH=$PATH:/usr/local/go/bin:$REAL_HOME/go/bin
+    echo "export PATH=\$PATH:/usr/local/go/bin:$REAL_HOME/go/bin" >> "$REAL_HOME/.bashrc"
 }
 
 # Function to check and install Go tools
@@ -77,8 +89,8 @@ install_go_tool() {
         return
     fi
 
-    if [ -f $HOME/go/bin/$binary_name ]; then
-        ln -sf $HOME/go/bin/$binary_name /usr/local/bin/$binary_name
+    if [ -f $REAL_HOME/go/bin/$binary_name ]; then
+        ln -sf $REAL_HOME/go/bin/$binary_name /usr/local/bin/$binary_name
         echo -e "${GREEN}[+] $tool_name is already installed${NC}"
         return
     fi
@@ -86,8 +98,8 @@ install_go_tool() {
     echo -e "${YELLOW}[*] Installing $tool_name...${NC}"
     go install -v $package_path@latest 2>&1 | grep -E "(download|install|compile)"
 
-    if [ -f $HOME/go/bin/$binary_name ]; then
-        ln -sf $HOME/go/bin/$binary_name /usr/local/bin/$binary_name
+    if [ -f $REAL_HOME/go/bin/$binary_name ]; then
+        ln -sf $REAL_HOME/go/bin/$binary_name /usr/local/bin/$binary_name
         echo -e "${GREEN}[+] $tool_name installed successfully${NC}"
     else
         echo -e "${RED}[!] Failed to install $tool_name${NC}"
@@ -114,14 +126,14 @@ install_amass() {
 
 # Function to install ctfr
 install_ctfr() {
-    if [ -d ~/Tools/ctfr ]; then
+    if [ -d $REAL_HOME/Tools/ctfr ]; then
         echo -e "${GREEN}[+] ctfr is already installed${NC}"
         return
     fi
 
     echo -e "${YELLOW}[*] Installing ctfr...${NC}"
-    mkdir -p ~/Tools
-    git clone https://github.com/UnaPibaGeek/ctfr.git ~/Tools/ctfr
+    mkdir -p $REAL_HOME/Tools
+    git clone https://github.com/UnaPibaGeek/ctfr.git $REAL_HOME/Tools/ctfr
     pip3 install -q argparse requests
     echo -e "${GREEN}[+] ctfr installed successfully${NC}"
 }
@@ -129,48 +141,48 @@ install_ctfr() {
 # Function to download wordlists
 download_wordlists() {
     echo -e "${YELLOW}[*] Downloading wordlists...${NC}"
-    mkdir -p ~/Tools
+    mkdir -p $REAL_HOME/Tools
 
     # Main subdomain wordlist
-    if [ ! -f ~/Tools/subdomains-top1million-5000.txt ]; then
+    if [ ! -f $REAL_HOME/Tools/subdomains-top1million-5000.txt ]; then
         echo -e "${YELLOW}[*] Downloading subdomains-top1million-5000.txt...${NC}"
-        curl -s -o ~/Tools/subdomains-top1million-5000.txt \
+        curl -s -o $REAL_HOME/Tools/subdomains-top1million-5000.txt \
             https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt
     else
         echo -e "${GREEN}[+] subdomains-top1million-5000.txt already exists${NC}"
     fi
 
     # Large wordlist
-    if [ ! -f ~/Tools/subdomains.txt ]; then
+    if [ ! -f $REAL_HOME/Tools/subdomains.txt ]; then
         echo -e "${YELLOW}[*] Downloading subdomains.txt...${NC}"
-        curl -s -o ~/Tools/subdomains.txt \
+        curl -s -o $REAL_HOME/Tools/subdomains.txt \
             https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
     else
         echo -e "${GREEN}[+] subdomains.txt already exists${NC}"
     fi
 
     # Full permutation wordlist
-    if [ ! -f ~/Tools/permutations_list.txt ]; then
+    if [ ! -f $REAL_HOME/Tools/permutations_list.txt ]; then
         echo -e "${YELLOW}[*] Downloading permutations_list.txt...${NC}"
-        curl -s -o ~/Tools/permutations_list.txt \
+        curl -s -o $REAL_HOME/Tools/permutations_list.txt \
             https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/permutations_list.txt
     else
         echo -e "${GREEN}[+] permutations_list.txt already exists${NC}"
     fi
 
     # Short permutation wordlist
-    if [ ! -f ~/Tools/permutations_list_short.txt ]; then
+    if [ ! -f $REAL_HOME/Tools/permutations_list_short.txt ]; then
         echo -e "${YELLOW}[*] Downloading permutations_list_short.txt...${NC}"
-        curl -s -o ~/Tools/permutations_list_short.txt \
+        curl -s -o $REAL_HOME/Tools/permutations_list_short.txt \
             https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/permutations_list_short.txt
     else
         echo -e "${GREEN}[+] permutations_list_short.txt already exists${NC}"
     fi
 
     # Create resolvers.txt
-    if [ ! -f ~/Tools/resolvers.txt ]; then
+    if [ ! -f $REAL_HOME/Tools/resolvers.txt ]; then
         echo -e "${YELLOW}[*] Creating resolvers.txt...${NC}"
-        curl -s -o ~/Tools/resolvers.txt \
+        curl -s -o $REAL_HOME/Tools/resolvers.txt \
             https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt
     else
         echo -e "${GREEN}[+] resolvers.txt already exists${NC}"
@@ -209,10 +221,10 @@ main() {
     # Step 6: Create symlinks for all Go tools
     echo ""
     echo -e "${YELLOW}[*] Creating symlinks...${NC}"
-    mkdir -p $HOME/go/bin
+    mkdir -p $REAL_HOME/go/bin
     for tool in subfinder assetfinder puredns httpx gotator; do
-        if [ -f $HOME/go/bin/$tool ] && [ ! -L /usr/local/bin/$tool ]; then
-            ln -sf $HOME/go/bin/$tool /usr/local/bin/$tool
+        if [ -f $REAL_HOME/go/bin/$tool ] && [ ! -L /usr/local/bin/$tool ]; then
+            ln -sf $REAL_HOME/go/bin/$tool /usr/local/bin/$tool
         fi
     done
 
@@ -231,11 +243,11 @@ main() {
     echo "  - gotator (permutation scanner)"
     echo ""
     echo -e "${GREEN}[+] Wordlists downloaded:${NC}"
-    echo "  - ~/Tools/subdomains-top1million-5000.txt"
-    echo "  - ~/Tools/subdomains.txt"
-    echo "  - ~/Tools/permutations_list.txt"
-    echo "  - ~/Tools/permutations_list_short.txt"
-    echo "  - ~/Tools/resolvers.txt"
+    echo "  - $REAL_HOME/Tools/subdomains-top1million-5000.txt"
+    echo "  - $REAL_HOME/Tools/subdomains.txt"
+    echo "  - $REAL_HOME/Tools/permutations_list.txt"
+    echo "  - $REAL_HOME/Tools/permutations_list_short.txt"
+    echo "  - $REAL_HOME/Tools/resolvers.txt"
     echo ""
     echo -e "${YELLOW}[!] Run 'source ~/.bashrc' or restart your terminal${NC}"
     echo -e "${YELLOW}[!] Usage: ./sef <domain>${NC}"
