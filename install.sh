@@ -39,6 +39,25 @@ fi
 echo -e "${GREEN}[+] Installing for user: $REAL_USER${NC}"
 echo -e "${GREEN}[+] Using home directory: $REAL_HOME${NC}"
 
+# Detect system architecture
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)
+        ARCH="amd64"
+        ;;
+    aarch64|arm64)
+        ARCH="arm64"
+        ;;
+    i686|i386)
+        ARCH="386"
+        ;;
+    *)
+        echo -e "${RED}[!] Unsupported architecture: $ARCH${NC}"
+        exit 1
+        ;;
+esac
+echo -e "${GREEN}[+] Detected architecture: $ARCH${NC}"
+
 # Remove Windows line endings
 sed -i 's/\r//' install.sh
 sed -i 's/\r//' sef
@@ -75,7 +94,11 @@ check_dependencies() {
 
     # Set Go PATH for real user
     export PATH=$PATH:/usr/local/go/bin:$REAL_HOME/go/bin
+    export GOPATH=$REAL_HOME/go
+    export GOBIN=$REAL_HOME/go/bin
     echo "export PATH=\$PATH:/usr/local/go/bin:$REAL_HOME/go/bin" >> "$REAL_HOME/.bashrc"
+    echo "export GOPATH=$REAL_HOME/go" >> "$REAL_HOME/.bashrc"
+    echo "export GOBIN=$REAL_HOME/go/bin" >> "$REAL_HOME/.bashrc"
 }
 
 # Function to check and install Go tools
@@ -96,7 +119,7 @@ install_go_tool() {
     fi
 
     echo -e "${YELLOW}[*] Installing $tool_name...${NC}"
-    go install $package_path@latest &>/dev/null
+    GOPATH=$REAL_HOME/go GOBIN=$REAL_HOME/go/bin go install $package_path@latest &>/dev/null
 
     if [ -f $REAL_HOME/go/bin/$binary_name ]; then
         ln -sf $REAL_HOME/go/bin/$binary_name /usr/local/bin/$binary_name
@@ -108,6 +131,11 @@ install_go_tool() {
 
 # Function to install Amass
 install_amass() {
+    # Remove broken Amass if it exists
+    if [ -f /usr/local/bin/amass ]; then
+        rm -f /usr/local/bin/amass
+    fi
+
     if command -v amass &> /dev/null; then
         echo -e "${GREEN}[+] Amass is already installed${NC}"
         return
@@ -116,10 +144,10 @@ install_amass() {
     echo -e "${YELLOW}[*] Installing Amass...${NC}"
     AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     cd /tmp
-    if wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_darwin_amd64.tar.gz ; then
-        tar -xzf amass_darwin_amd64.tar.gz
-        if [ -f amass_darwin_amd64/amass ]; then
-            mv amass_darwin_amd64/amass /usr/local/bin/
+    if wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_${ARCH}.tar.gz ; then
+        tar -xzf amass_${AMASS_VERSION#v}_linux_${ARCH}.tar.gz
+        if [ -f amass_${AMASS_VERSION#v}_linux_${ARCH}/amass ]; then
+            mv amass_${AMASS_VERSION#v}_linux_${ARCH}/amass /usr/local/bin/
             rm -rf amass_*
             cd - &>/dev/null
             echo -e "${GREEN}[+] Amass installed successfully${NC}"
@@ -231,6 +259,18 @@ main() {
     echo ""
     echo -e "${YELLOW}[*] Creating symlinks...${NC}"
     mkdir -p $REAL_HOME/go/bin
+
+    # Remove old symlinks pointing to /root
+    for tool in subfinder assetfinder puredns httpx gotator; do
+        if [ -L /usr/local/bin/$tool ]; then
+            LINK_TARGET=$(readlink /usr/local/bin/$tool)
+            if [[ "$LINK_TARGET" == /root/* ]]; then
+                rm -f /usr/local/bin/$tool
+            fi
+        fi
+    done
+
+    # Create new symlinks
     for tool in subfinder assetfinder puredns httpx gotator; do
         if [ -f $REAL_HOME/go/bin/$tool ] && [ ! -L /usr/local/bin/$tool ]; then
             ln -sf $REAL_HOME/go/bin/$tool /usr/local/bin/$tool
