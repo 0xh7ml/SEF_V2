@@ -63,10 +63,10 @@ check_dependencies() {
 
         # Detect OS
         if [ -f /etc/debian_version ]; then
-            apt-get update -qq
-            apt-get install -y git wget curl golang python3 python3-pip make gcc unzip
+            apt-get update -qq &>/dev/null
+            apt-get install -y git wget curl golang python3 python3-pip make gcc unzip &>/dev/null
         elif [ -f /etc/redhat-release ]; then
-            yum install -y git wget curl golang python3 python3-pip make gcc unzip
+            yum install -y git wget curl golang python3 python3-pip make gcc unzip &>/dev/null
         else
             echo -e "${RED}[!] Unsupported OS. Please install dependencies manually.${NC}"
             exit 1
@@ -96,7 +96,7 @@ install_go_tool() {
     fi
 
     echo -e "${YELLOW}[*] Installing $tool_name...${NC}"
-    go install -v $package_path@latest 2>&1 | grep -E "(download|install|compile)"
+    go install $package_path@latest &>/dev/null
 
     if [ -f $REAL_HOME/go/bin/$binary_name ]; then
         ln -sf $REAL_HOME/go/bin/$binary_name /usr/local/bin/$binary_name
@@ -116,10 +116,10 @@ install_amass() {
     echo -e "${YELLOW}[*] Installing Amass...${NC}"
     AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     cd /tmp
-    if wget https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_darwin_amd64.tar.gz ; then
-        tar -xzf amass_darwin_amd64.tar.gz
-        if [ -f amass ]; then
-            mv amass /usr/local/bin/
+    if wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.tar.gz ; then
+        tar -xzf amass_${AMASS_VERSION#v}_linux_amd64.tar.gz
+        if [ -f amass_${AMASS_VERSION#v}_linux_amd64/amass ]; then
+            mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
             rm -rf amass_*
             cd - &>/dev/null
             echo -e "${GREEN}[+] Amass installed successfully${NC}"
@@ -142,8 +142,8 @@ install_ctfr() {
 
     echo -e "${YELLOW}[*] Installing ctfr...${NC}"
     mkdir -p $REAL_HOME/Tools
-    git clone https://github.com/UnaPibaGeek/ctfr.git $REAL_HOME/Tools/ctfr
-    pip3 install -q --break-system-packages argparse requests 2>/dev/null || pip3 install -q --user argparse requests
+    git clone -q https://github.com/UnaPibaGeek/ctfr.git $REAL_HOME/Tools/ctfr &>/dev/null
+    pip3 install -q --break-system-packages argparse requests 2>/dev/null || pip3 install -q --user argparse requests 2>/dev/null
     echo -e "${GREEN}[+] ctfr installed successfully${NC}"
 }
 
