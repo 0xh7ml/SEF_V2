@@ -116,12 +116,21 @@ install_amass() {
     echo -e "${YELLOW}[*] Installing Amass...${NC}"
     AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     cd /tmp
-    wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.zip
-    unzip -q amass_${AMASS_VERSION#v}_linux_amd64.zip
-    mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
-    rm -rf amass_*
-    cd - &>/dev/null
-    echo -e "${GREEN}[+] Amass installed successfully${NC}"
+    if wget https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.zip; then
+        unzip -q amass_${AMASS_VERSION#v}_linux_amd64.zip
+        if [ -f amass_${AMASS_VERSION#v}_linux_amd64/amass ]; then
+            mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
+            rm -rf amass_*
+            cd - &>/dev/null
+            echo -e "${GREEN}[+] Amass installed successfully${NC}"
+        else
+            cd - &>/dev/null
+            echo -e "${RED}[!] Failed to install Amass - extracted file not found${NC}"
+        fi
+    else
+        cd - &>/dev/null
+        echo -e "${RED}[!] Failed to download Amass${NC}"
+    fi
 }
 
 # Function to install ctfr
@@ -134,7 +143,7 @@ install_ctfr() {
     echo -e "${YELLOW}[*] Installing ctfr...${NC}"
     mkdir -p $REAL_HOME/Tools
     git clone https://github.com/UnaPibaGeek/ctfr.git $REAL_HOME/Tools/ctfr
-    pip3 install -q argparse requests
+    pip3 install -q --break-system-packages argparse requests 2>/dev/null || pip3 install -q --user argparse requests
     echo -e "${GREEN}[+] ctfr installed successfully${NC}"
 }
 
