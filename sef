@@ -1,244 +1,455 @@
 #!/bin/bash
 
+# SEF v2 - Subdomain Enumeration Framework
+# Author: @0xh7ml
+
 # Color codes
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Default paths
+TOOLS_DIR="$HOME/Tools"
+WORDLIST="$TOOLS_DIR/subdomains-top1million-5000.txt"
+RESOLVER="$TOOLS_DIR/resolvers.txt"
+RESOLVER_TRUSTED="$TOOLS_DIR/resolvers_trusted.txt"
+PERMUTATIONS_LIST="$TOOLS_DIR/permutations_list_short.txt"
+PERMUTATIONS_LIST_FULL="$TOOLS_DIR/permutations_list.txt"
+OUTPUT_DIR="Recon"
+
+# Flags
+DOMAIN=""
+DOMAIN_LIST=""
+WORDLIST_CUSTOM=""
+RESOLVER_CUSTOM=""
+QUICK_MODE=false
+ALL_MODE=false
+DEEP_MODE=false
+
+# Display logo
 logo() {
-    echo " _____                      _ _        _     "
-    echo "(_____)           _        | | |      | |    "
-    echo "   _   ____   ___| |_  ____| | |   ___| | _  "
-    echo "  | | |  _ \\ /___|  _)/ _  | | |  /___| || \\ "
-    echo " _| |_| | | |___ | |_( ( | | | |_|___ | | | |"
-    echo "(_____|_| |_(___/ \\___\\_|\\||_|_|_(_(___/|_| |_|"
-    echo "                                             "
-    echo "           Run it as a root user             "
-    echo "                                             "
-    echo "                 @0xh7ml                     "
+    echo " _____ _____ _____"
+    echo "/  ___|  ___|  ___|"
+    echo "\  -- | |__ | |_"
+    echo "  --  \  __||  _ |"
+    echo "/\__/ / |___| |"
+    echo "\____/\____/\_| @0xh7ml"
+    echo "Subdomain Enumeration Framework v2.0"
+    echo ""
 }
 
-logo
+# Display help
+help() {
+    echo "Usage: sef [options]"
+    echo ""
+    echo "Options:"
+    echo "  -d <domain>         Target domain"
+    echo "  -w <wordlist>       Custom wordlist for bruteforce"
+    echo "  -r <resolvers>      Custom resolvers file"
+    echo "  -o <output>         Output directory"
+    echo "  --quick             Quick passive scan only"
+    echo "  --all               Full enumeration (passive + active + permutation + csp + archive)"
+    echo "  --deep              Deep scan with larger wordlists"
+    echo "  --dLq <file>        Quick passive scan for domain list"
+    echo "  --dLa <file>        Full scan for domain list"
+    echo "  -h, --help          Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  sef -d example.com --quick"
+    echo "  sef -d example.com -w wordlist.txt -r resolvers.txt --all -o output"
+    echo "  sef --dLa domains.txt"
+    echo ""
+    exit 0
+}
 
-# Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}This script must be run as root${NC}"
-   exit 1
-fi
+# Parse arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -d)
+                DOMAIN="$2"
+                shift 2
+                ;;
+            -w)
+                WORDLIST_CUSTOM="$2"
+                shift 2
+                ;;
+            -r)
+                RESOLVER_CUSTOM="$2"
+                shift 2
+                ;;
+            -o)
+                OUTPUT_DIR="$2"
+                shift 2
+                ;;
+            --quick)
+                QUICK_MODE=true
+                shift
+                ;;
+            --all)
+                ALL_MODE=true
+                shift
+                ;;
+            --deep)
+                DEEP_MODE=true
+                shift
+                ;;
+            --dLq)
+                DOMAIN_LIST="$2"
+                QUICK_MODE=true
+                shift 2
+                ;;
+            --dLa)
+                DOMAIN_LIST="$2"
+                ALL_MODE=true
+                shift 2
+                ;;
+            -h|--help)
+                help
+                ;;
+            *)
+                echo -e "${RED}[!] Unknown option: $1${NC}"
+                help
+                ;;
+        esac
+    done
+}
 
-# Remove Windows line endings
-sed -i 's/\r//' install.sh
-sed -i 's/\r//' sef
+# Check if required tools are installed
+check_tools() {
+    echo -e "${YELLOW}[*] Checking required tools...${NC}"
 
-# Function to check and install dependencies
-check_dependencies() {
-    echo -e "${YELLOW}[*] Checking dependencies...${NC}"
-
-    local deps=("git" "wget" "curl" "go" "python3" "pip3" "make" "gcc")
+    local required_tools=("subfinder" "assetfinder" "puredns" "httpx" "gotator" "dnsx" "anew")
     local missing=()
 
-    for dep in "${deps[@]}"; do
-        if ! command -v $dep &> /dev/null; then
-            missing+=("$dep")
-        else
-            echo -e "${GREEN}[+] $dep is installed${NC}"
+    for tool in "${required_tools[@]}"; do
+        if ! command -v $tool &> /dev/null; then
+            missing+=("$tool")
         fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
-        echo -e "${YELLOW}[*] Installing missing dependencies: ${missing[*]}${NC}"
+        echo -e "${RED}[!] Missing required tools: ${missing[*]}${NC}"
+        echo -e "${YELLOW}[!] Run 'sudo ./install.sh' to install all required tools${NC}"
+        exit 1
+    fi
 
-        # Detect OS
-        if [ -f /etc/debian_version ]; then
-            apt-get update -qq
-            apt-get install -y git wget curl golang python3 python3-pip make gcc unzip
-        elif [ -f /etc/redhat-release ]; then
-            yum install -y git wget curl golang python3 python3-pip make gcc unzip
-        else
-            echo -e "${RED}[!] Unsupported OS. Please install dependencies manually.${NC}"
+    echo -e "${GREEN}[+] All required tools are installed${NC}"
+}
+
+# Passive subdomain enumeration
+passive_enumeration() {
+    local domain=$1
+    local output_dir=$2
+
+    echo -e "${BLUE}[*] Starting passive enumeration for $domain...${NC}"
+
+    mkdir -p "$output_dir/passive"
+
+    # Subfinder
+    echo -e "${YELLOW}[*] Running subfinder...${NC}"
+    subfinder -d "$domain" -silent 2>/dev/null | anew "$output_dir/passive/subfinder.txt" &>/dev/null &
+    SF_PID=$!
+
+    # Assetfinder
+    echo -e "${YELLOW}[*] Running assetfinder...${NC}"
+    assetfinder --subs-only "$domain" 2>/dev/null | anew "$output_dir/passive/assetfinder.txt" &>/dev/null &
+    AF_PID=$!
+
+    # CRT.sh
+    if command -v crt &> /dev/null; then
+        echo -e "${YELLOW}[*] Running crt...${NC}"
+        crt "$domain" 2>/dev/null | anew "$output_dir/passive/crt.txt" &>/dev/null &
+        CRT_PID=$!
+    fi
+
+    # GitHub subdomains
+    if command -v github-subdomains &> /dev/null; then
+        echo -e "${YELLOW}[*] Running github-subdomains...${NC}"
+        github-subdomains -d "$domain" -t 100 2>/dev/null | anew "$output_dir/passive/github.txt" &>/dev/null &
+        GH_PID=$!
+    fi
+
+    # GitLab subdomains
+    if command -v gitlab-subdomains &> /dev/null; then
+        echo -e "${YELLOW}[*] Running gitlab-subdomains...${NC}"
+        gitlab-subdomains -d "$domain" -t 100 2>/dev/null | anew "$output_dir/passive/gitlab.txt" &>/dev/null &
+        GL_PID=$!
+    fi
+
+    # Analytics relationships
+    if command -v analyticsrelationships &> /dev/null; then
+        echo -e "${YELLOW}[*] Running analyticsrelationships...${NC}"
+        analyticsrelationships -d "$domain" 2>/dev/null | anew "$output_dir/passive/analytics.txt" &>/dev/null &
+        AR_PID=$!
+    fi
+
+    # Wait for all passive tools
+    wait $SF_PID $AF_PID 2>/dev/null
+    [ -n "$CRT_PID" ] && wait $CRT_PID 2>/dev/null
+    [ -n "$GH_PID" ] && wait $GH_PID 2>/dev/null
+    [ -n "$GL_PID" ] && wait $GL_PID 2>/dev/null
+    [ -n "$AR_PID" ] && wait $AR_PID 2>/dev/null
+
+    # Merge all passive results
+    cat "$output_dir/passive"/*.txt 2>/dev/null | sort -u | anew "$output_dir/passive/merged.txt" &>/dev/null
+
+    local count=$(wc -l < "$output_dir/passive/merged.txt" 2>/dev/null || echo "0")
+    echo -e "${GREEN}[+] Passive enumeration complete: $count subdomains${NC}"
+}
+
+# Active bruteforce enumeration
+active_enumeration() {
+    local domain=$1
+    local output_dir=$2
+    local wordlist=${3:-$WORDLIST}
+    local resolver=${4:-$RESOLVER}
+
+    echo -e "${BLUE}[*] Starting active enumeration for $domain...${NC}"
+
+    mkdir -p "$output_dir/active"
+
+    # Use puredns for bruteforce
+    echo -e "${YELLOW}[*] Running puredns bruteforce...${NC}"
+    puredns bruteforce "$wordlist" "$domain" -r "$resolver" --wildcard-tests 2>/dev/null | \
+        sort -u | anew "$output_dir/active/bruteforce_raw.txt" &>/dev/null
+
+    # Resolve the bruteforce results
+    if [ -f "$output_dir/active/bruteforce_raw.txt" ]; then
+        echo -e "${YELLOW}[*] Resolving bruteforce results...${NC}"
+        puredns resolve "$output_dir/active/bruteforce_raw.txt" -r "$resolver_TRUSTED" --wildcard-tests 2>/dev/null | \
+            sort -u | anew "$output_dir/active/resolved.txt" &>/dev/null
+    fi
+
+    local count=$(wc -l < "$output_dir/active/resolved.txt" 2>/dev/null || echo "0")
+    echo -e "${GREEN}[+] Active enumeration complete: $count subdomains${NC}"
+}
+
+# Permutation enumeration
+permutation_enumeration() {
+    local domain=$1
+    local output_dir=$2
+
+    echo -e "${BLUE}[*] Starting permutation enumeration for $domain...${NC}"
+
+    mkdir -p "$output_dir/permutation"
+
+    # Check if we have existing subdomains to permute
+    local base_subs="$output_dir/passive/merged.txt"
+    if [ ! -f "$base_subs" ]; then
+        echo -e "${YELLOW}[!] No base subdomains found for permutation${NC}"
+        return
+    fi
+
+    local perm_list=$PERMUTATIONS_LIST
+    if [ "$DEEP_MODE" = true ]; then
+        perm_list=$PERMUTATIONS_LIST_FULL
+    fi
+
+    echo -e "${YELLOW}[*] Running gotator...${NC}"
+    gotator -sub "$base_subs" -perm "$perm_list" -depth 1 -numbers 3 -mindup -adv -md 2>/dev/null | \
+        sort -u | anew "$output_dir/permutation/gotator_raw.txt" &>/dev/null
+
+    # Resolve permutations
+    if [ -f "$output_dir/permutation/gotator_raw.txt" ]; then
+        echo -e "${YELLOW}[*] Resolving permutations...${NC}"
+        puredns resolve "$output_dir/permutation/gotator_raw.txt" -r "$RESOLVER_TRUSTED" 2>/dev/null | \
+            sort -u | anew "$output_dir/permutation/resolved.txt" &>/dev/null
+    fi
+
+    local count=$(wc -l < "$output_dir/permutation/resolved.txt" 2>/dev/null || echo "0")
+    echo -e "${GREEN}[+] Permutation enumeration complete: $count subdomains${NC}"
+}
+
+# CSP enumeration
+csp_enumeration() {
+    local domain=$1
+    local output_dir=$2
+
+    echo -e "${BLUE}[*] Starting CSP enumeration for $domain...${NC}"
+
+    mkdir -p "$output_dir/csp"
+
+    # CTFR
+    if [ -f "$TOOLS_DIR/ctfr/ctfr.py" ]; then
+        echo -e "${YELLOW}[*] Running ctfr...${NC}"
+        python3 "$TOOLS_DIR/ctfr/ctfr.py" -d "$domain" -o "$output_dir/csp/ctfr.txt" &>/dev/null
+    fi
+
+    # Csprecon
+    if command -v csprecon &> /dev/null; then
+        echo -e "${YELLOW}[*] Running csprecon...${NC}"
+        csprecon -d "$domain" -s 2>/dev/null | anew "$output_dir/csp/csprecon.txt" &>/dev/null
+    fi
+
+    # Katana web crawling
+    if command -v katana &> /dev/null; then
+        echo -e "${YELLOW}[*] Running katana...${NC}"
+        # First need alive subdomains
+        local alive_subs="$output_dir/subdomains_alive.txt"
+        if [ -f "$alive_subs" ]; then
+            katana -list "$alive_subs" -depth 2 -js-crawler -d 2 2>/dev/null | \
+                unfurl -u domains 2>/dev/null | anew "$output_dir/csp/katana.txt" &>/dev/null
+        fi
+    fi
+
+    # Merge CSP results
+    cat "$output_dir/csp"/*.txt 2>/dev/null | grep -v "^$" | sort -u | anew "$output_dir/csp/merged.txt" &>/dev/null
+
+    local count=$(wc -l < "$output_dir/csp/merged.txt" 2>/dev/null || echo "0")
+    echo -e "${GREEN}[+] CSP enumeration complete: $count subdomains${NC}"
+}
+
+# Archive enumeration
+archive_enumeration() {
+    local domain=$1
+    local output_dir=$2
+
+    echo -e "${BLUE}[*] Starting archive enumeration for $domain...${NC}"
+
+    mkdir -p "$output_dir/archive"
+
+    # Waymore
+    if command -v waymore &> /dev/null; then
+        echo -e "${YELLOW}[*] Running waymore...${NC}"
+        waymore -i "$domain" -mode V -f "$output_dir/archive/waymore.txt" 2>/dev/null
+    fi
+
+    # Roboxtractor
+    if command -v roboxtractor &> /dev/null; then
+        echo -e "${YELLOW}[*] Running roboxtractor...${NC}"
+        echo "$domain" | roboxtractor 2>/dev/null | anew "$output_dir/archive/roboxtractor.txt" &>/dev/null
+    fi
+
+    # Merge archive results
+    cat "$output_dir/archive"/*.txt 2>/dev/null | grep -v "^$" | sort -u | anew "$output_dir/archive/merged.txt" &>/dev/null
+
+    local count=$(wc -l < "$output_dir/archive/merged.txt" 2>/dev/null || echo "0")
+    echo -e "${GREEN}[+] Archive enumeration complete: $count subdomains${NC}"
+}
+
+# Resolve and validate subdomains
+resolve_and_validate() {
+    local output_dir=$1
+
+    echo -e "${BLUE}[*] Resolving and validating subdomains...${NC}"
+
+    # Gather all subdomains
+    cat "$output_dir"/passive/*.txt "$output_dir"/active/*.txt "$output_dir"/permutation/*.txt "$output_dir"/csp/*.txt "$output_dir"/archive/*.txt 2>/dev/null | \
+        grep -v "^$" | sort -u | anew "$output_dir/subdomains.txt" &>/dev/null
+
+    # Resolve with dnsx
+    echo -e "${YELLOW}[*] Resolving subdomains with dnsx...${NC}"
+    dnsx -l "$output_dir/subdomains.txt" -r "$RESOLVER_TRUSTED" -silent -retry 3 2>/dev/null | \
+        anew "$output_dir/subdomains_alive.txt" &>/dev/null
+
+    # HTTP probe with httpx
+    echo -e "${YELLOW}[*] Probing HTTP services with httpx...${NC}"
+    httpx -l "$output_dir/subdomains_alive.txt" -silent -status-code -title 2>/dev/null | anew "$output_dir/subdomains_http.txt" &>/dev/null
+
+    local total=$(wc -l < "$output_dir/subdomains.txt" 2>/dev/null || echo "0")
+    local alive=$(wc -l < "$output_dir/subdomains_alive.txt" 2>/dev/null || echo "0")
+    local http=$(wc -l < "$output_dir/subdomains_http.txt" 2>/dev/null || echo "0")
+
+    echo -e "${GREEN}[+] Resolution complete:${NC}"
+    echo -e "  - Total subdomains: $total"
+    echo -e "  - Alive subdomains: $alive"
+    echo -e "  - HTTP responding: $http"
+}
+
+# Main enumeration function for a single domain
+enumerate_domain() {
+    local domain=$1
+    local output_dir="$OUTPUT_DIR/$domain"
+
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}  Enumerating: $domain${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+
+    mkdir -p "$output_dir"
+
+    # Always run passive enumeration
+    passive_enumeration "$domain" "$output_dir"
+
+    # Quick mode - stop after passive
+    if [ "$QUICK_MODE" = true ]; then
+        echo ""
+        echo -e "${YELLOW}[!] Quick mode complete${NC}"
+        resolve_and_validate "$output_dir"
+        return
+    fi
+
+    # Full enumeration
+    if [ "$ALL_MODE" = true ]; then
+        # Active bruteforce
+        local wordlist=${WORDLIST_CUSTOM:-$WORDLIST}
+        local resolver=${RESOLVER_CUSTOM:-$RESOLVER}
+        active_enumeration "$domain" "$output_dir" "$wordlist" "$resolver"
+
+        # Permutation
+        permutation_enumeration "$domain" "$output_dir"
+
+        # CSP enumeration
+        csp_enumeration "$domain" "$output_dir"
+
+        # Archive enumeration
+        archive_enumeration "$domain" "$output_dir"
+    fi
+
+    # Final resolution
+    resolve_and_validate "$output_dir"
+}
+
+# Main function
+main() {
+    logo
+    parse_args "$@"
+
+    # Check for domain or domain list
+    if [ -z "$DOMAIN" ] && [ -z "$DOMAIN_LIST" ]; then
+        echo -e "${RED}[!] Error: Please specify a domain (-d) or domain list (--dLq/--dLa)${NC}"
+        help
+    fi
+
+    # Check tools
+    check_tools
+
+    # Single domain
+    if [ -n "$DOMAIN" ]; then
+        enumerate_domain "$DOMAIN"
+    fi
+
+    # Domain list
+    if [ -n "$DOMAIN_LIST" ]; then
+        if [ ! -f "$DOMAIN_LIST" ]; then
+            echo -e "${RED}[!] Error: Domain list file not found: $DOMAIN_LIST${NC}"
             exit 1
         fi
+
+        echo ""
+        echo -e "${BLUE}[*] Processing domain list: $DOMAIN_LIST${NC}"
+
+        while IFS= read -r domain || [ -n "$domain" ]; do
+            # Skip comments and empty lines
+            [[ "$domain" =~ ^#.*$ ]] && continue
+            [[ -z "$domain" ]] && continue
+
+            enumerate_domain "$domain"
+        done < "$DOMAIN_LIST"
     fi
-
-    # Set Go PATH
-    export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
-    echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
-}
-
-# Function to check and install Go tools
-install_go_tool() {
-    local tool_name=$1
-    local package_path=$2
-    local binary_name=$3
-
-    if command -v $binary_name &> /dev/null; then
-        echo -e "${GREEN}[+] $tool_name is already installed${NC}"
-        return
-    fi
-
-    if [ -f $HOME/go/bin/$binary_name ]; then
-        ln -sf $HOME/go/bin/$binary_name /usr/local/bin/$binary_name
-        echo -e "${GREEN}[+] $tool_name is already installed${NC}"
-        return
-    fi
-
-    echo -e "${YELLOW}[*] Installing $tool_name...${NC}"
-    go install -v $package_path@latest 2>&1 | grep -E "(download|install|compile)"
-
-    if [ -f $HOME/go/bin/$binary_name ]; then
-        ln -sf $HOME/go/bin/$binary_name /usr/local/bin/$binary_name
-        echo -e "${GREEN}[+] $tool_name installed successfully${NC}"
-    else
-        echo -e "${RED}[!] Failed to install $tool_name${NC}"
-    fi
-}
-
-# Function to install Amass
-install_amass() {
-    if command -v amass &> /dev/null; then
-        echo -e "${GREEN}[+] Amass is already installed${NC}"
-        return
-    fi
-
-    echo -e "${YELLOW}[*] Installing Amass...${NC}"
-    AMASS_VERSION=$(curl -s https://api.github.com/repos/owasp-amass/amass/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-    cd /tmp
-    wget -q https://github.com/owasp-amass/amass/releases/download/${AMASS_VERSION}/amass_${AMASS_VERSION#v}_linux_amd64.zip
-    unzip -q amass_${AMASS_VERSION#v}_linux_amd64.zip
-    mv amass_${AMASS_VERSION#v}_linux_amd64/amass /usr/local/bin/
-    rm -rf amass_*
-    cd - &>/dev/null
-    echo -e "${GREEN}[+] Amass installed successfully${NC}"
-}
-
-# Function to install ctfr
-install_ctfr() {
-    if [ -d ~/Tools/ctfr ]; then
-        echo -e "${GREEN}[+] ctfr is already installed${NC}"
-        return
-    fi
-
-    echo -e "${YELLOW}[*] Installing ctfr...${NC}"
-    mkdir -p ~/Tools
-    git clone https://github.com/UnaPibaGeek/ctfr.git ~/Tools/ctfr
-    pip3 install -q argparse requests
-    echo -e "${GREEN}[+] ctfr installed successfully${NC}"
-}
-
-# Function to download wordlists
-download_wordlists() {
-    echo -e "${YELLOW}[*] Downloading wordlists...${NC}"
-    mkdir -p ~/Tools
-
-    # Main subdomain wordlist
-    if [ ! -f ~/Tools/subdomains-top1million-5000.txt ]; then
-        echo -e "${YELLOW}[*] Downloading subdomains-top1million-5000.txt...${NC}"
-        curl -s -o ~/Tools/subdomains-top1million-5000.txt \
-            https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt
-    else
-        echo -e "${GREEN}[+] subdomains-top1million-5000.txt already exists${NC}"
-    fi
-
-    # Large wordlist
-    if [ ! -f ~/Tools/subdomains.txt ]; then
-        echo -e "${YELLOW}[*] Downloading subdomains.txt...${NC}"
-        curl -s -o ~/Tools/subdomains.txt \
-            https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
-    else
-        echo -e "${GREEN}[+] subdomains.txt already exists${NC}"
-    fi
-
-    # Full permutation wordlist
-    if [ ! -f ~/Tools/permutations_list.txt ]; then
-        echo -e "${YELLOW}[*] Downloading permutations_list.txt...${NC}"
-        curl -s -o ~/Tools/permutations_list.txt \
-            https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/permutations_list.txt
-    else
-        echo -e "${GREEN}[+] permutations_list.txt already exists${NC}"
-    fi
-
-    # Short permutation wordlist
-    if [ ! -f ~/Tools/permutations_list_short.txt ]; then
-        echo -e "${YELLOW}[*] Downloading permutations_list_short.txt...${NC}"
-        curl -s -o ~/Tools/permutations_list_short.txt \
-            https://raw.githubusercontent.com/six2dez/reconftw/main/data/wordlists/permutations_list_short.txt
-    else
-        echo -e "${GREEN}[+] permutations_list_short.txt already exists${NC}"
-    fi
-
-    # Create resolvers.txt
-    if [ ! -f ~/Tools/resolvers.txt ]; then
-        echo -e "${YELLOW}[*] Creating resolvers.txt...${NC}"
-        curl -s -o ~/Tools/resolvers.txt \
-            https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt
-    else
-        echo -e "${GREEN}[+] resolvers.txt already exists${NC}"
-    fi
-}
-
-# Main installation workflow
-main() {
-    echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    SEF Installer${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-
-    # Step 1: Check dependencies
-    check_dependencies
-
-    # Step 2: Install Go tools
-    echo ""
-    echo -e "${YELLOW}[*] Installing Go tools...${NC}"
-    install_go_tool "Subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder" "subfinder"
-    install_go_tool "Assetfinder" "github.com/tomnomnom/assetfinder" "assetfinder"
-    install_go_tool "Puredns" "github.com/d3mondev/puredns/v2" "puredns"
-    install_go_tool "Httpx" "github.com/projectdiscovery/httpx/cmd/httpx" "httpx"
-    install_go_tool "Gotator" "github.com/Josue87/gotator" "gotator"
-
-    # Step 3: Install Amass
-    install_amass
-
-    # Step 4: Install ctfr
-    install_ctfr
-
-    # Step 5: Download wordlists
-    download_wordlists
-
-    # Step 6: Create symlinks for all Go tools
-    echo ""
-    echo -e "${YELLOW}[*] Creating symlinks...${NC}"
-    mkdir -p $HOME/go/bin
-    for tool in subfinder assetfinder puredns httpx gotator; do
-        if [ -f $HOME/go/bin/$tool ] && [ ! -L /usr/local/bin/$tool ]; then
-            ln -sf $HOME/go/bin/$tool /usr/local/bin/$tool
-        fi
-    done
 
     echo ""
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Installation Complete!${NC}"
+    echo -e "${GREEN}  Enumeration Complete!${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
-    echo -e "${GREEN}[+] Tools installed:${NC}"
-    echo "  - subfinder (passive subdomain scanner)"
-    echo "  - ctfr (CSP subdomain scanner)"
-    echo "  - assetfinder (passive subdomain scanner)"
-    echo "  - amass (passive subdomain scanner)"
-    echo "  - httpx (CSP subdomain scanner)"
-    echo "  - puredns (active bruteforce)"
-    echo "  - gotator (permutation scanner)"
+    echo -e "${GREEN}[+] Results saved to: $OUTPUT_DIR/${NC}"
     echo ""
-    echo -e "${GREEN}[+] Wordlists downloaded:${NC}"
-    echo "  - ~/Tools/subdomains-top1million-5000.txt"
-    echo "  - ~/Tools/subdomains.txt"
-    echo "  - ~/Tools/permutations_list.txt"
-    echo "  - ~/Tools/permutations_list_short.txt"
-    echo "  - ~/Tools/resolvers.txt"
-    echo ""
-    echo -e "${YELLOW}[!] Run 'source ~/.bashrc' or restart your terminal${NC}"
-    echo -e "${YELLOW}[!] Usage: ./sef <domain>${NC}"
 }
 
-main
+# Run main
+main "$@"
