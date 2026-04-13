@@ -27,9 +27,12 @@ RESOLVER_CUSTOM=""
 QUICK_MODE=false
 ALL_MODE=false
 DEEP_MODE=false
+CHECK_MODE=false
+SILENT_MODE=false
 
 # Display logo
 logo() {
+    [ "$SILENT_MODE" = true ] && return
     echo " _____ _____ _____"
     echo "/  ___|  ___|  ___|"
     echo "\  -- | |__ | |_"
@@ -54,12 +57,16 @@ help() {
     echo "  --deep              Deep scan with larger wordlists"
     echo "  --dLq <file>        Quick passive scan for domain list"
     echo "  --dLa <file>        Full scan for domain list"
+    echo "  --check             Check if all required tools are installed"
+    echo "  --silent            Silent mode (suppress banner and output headers)"
     echo "  -h, --help          Show this help message"
     echo ""
     echo "Examples:"
     echo "  sef -d example.com --quick"
     echo "  sef -d example.com -w wordlist.txt -r resolvers.txt --all -o output"
     echo "  sef --dLa domains.txt"
+    echo "  sef --check"
+    echo "  sef -d example.com --silent"
     echo ""
     exit 0
 }
@@ -106,6 +113,14 @@ parse_args() {
                 ALL_MODE=true
                 shift 2
                 ;;
+            --check)
+                CHECK_MODE=true
+                shift
+                ;;
+            --silent)
+                SILENT_MODE=true
+                shift
+                ;;
             -h|--help)
                 help
                 ;;
@@ -121,7 +136,7 @@ parse_args() {
 check_tools() {
     echo -e "${YELLOW}[*] Checking required tools...${NC}"
 
-    local required_tools=("subfinder" "assetfinder" "puredns" "httpx" "gotator" "dnsx" "anew")
+    local required_tools=("subfinder" "httpx" "gotator" "anew" "shuffledns" "katana" "urlfinder" "unfurl")
     local missing=()
 
     for tool in "${required_tools[@]}"; do
@@ -364,11 +379,11 @@ enumerate_domain() {
     local domain=$1
     local output_dir="$OUTPUT_DIR/$domain"
 
-    echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}  Enumerating: $domain${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
+    [ "$SILENT_MODE" = false ] && echo ""
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}========================================${NC}"
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}  Enumerating: $domain${NC}"
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}========================================${NC}"
+    [ "$SILENT_MODE" = false ] && echo ""
 
     mkdir -p "$output_dir"
 
@@ -406,8 +421,14 @@ enumerate_domain() {
 
 # Main function
 main() {
-    logo
     parse_args "$@"
+    logo
+
+    # Check mode - just verify tools and exit
+    if [ "$CHECK_MODE" = true ]; then
+        check_tools
+        exit 0
+    fi
 
     # Check for domain or domain list
     if [ -z "$DOMAIN" ] && [ -z "$DOMAIN_LIST" ]; then
@@ -430,8 +451,8 @@ main() {
             exit 1
         fi
 
-        echo ""
-        echo -e "${BLUE}[*] Processing domain list: $DOMAIN_LIST${NC}"
+        [ "$SILENT_MODE" = false ] && echo ""
+        [ "$SILENT_MODE" = false ] && echo -e "${BLUE}[*] Processing domain list: $DOMAIN_LIST${NC}"
 
         while IFS= read -r domain || [ -n "$domain" ]; do
             # Skip comments and empty lines
@@ -442,13 +463,13 @@ main() {
         done < "$DOMAIN_LIST"
     fi
 
-    echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}  Enumeration Complete!${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-    echo -e "${GREEN}[+] Results saved to: $OUTPUT_DIR/${NC}"
-    echo ""
+    [ "$SILENT_MODE" = false ] && echo ""
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}========================================${NC}"
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}  Enumeration Complete!${NC}"
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}========================================${NC}"
+    [ "$SILENT_MODE" = false ] && echo ""
+    [ "$SILENT_MODE" = false ] && echo -e "${GREEN}[+] Results saved to: $OUTPUT_DIR/${NC}"
+    [ "$SILENT_MODE" = false ] && echo ""
 }
 
 # Run main
